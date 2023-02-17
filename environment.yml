@@ -1,0 +1,16 @@
+name: PIV
+
+channels:
+  - conda-forge
+    
+dependencies:
+  - python=3.10
+  - pyqt=5.12
+  - napari[pyqt5]
+  - numpy
+  - scipy
+  - scikit-image
+  - matplotlib-base
+  - pip
+  - pip:
+    - opencv-python
