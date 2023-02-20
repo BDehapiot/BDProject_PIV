@@ -10,10 +10,10 @@ from scipy.signal import correlate
 
 #%% Open data
 
-# stack_name = '18-07-11_40x_GBE_UtrCH_Ctrl_b1_uint8.tif'
+stack_name = '18-07-11_40x_GBE_UtrCH_Ctrl_b1_uint8.tif'
 # stack_name = '18-07-11_40x_GBE_UtrCH_Ctrl_b1_uint8_static.tif'
 # stack_name = '18-07-11_40x_GBE_UtrCH_Ctrl_b1_uint8_mobile.tif'
-stack_name = 'test(dy2-dx4).tif'
+# stack_name = 'test(dy2-dx4).tif'
 stack = io.imread(Path('data', stack_name))
 
 #%% Options
@@ -94,9 +94,6 @@ for t in range(1, nT):
 
 end = time.time()
 print(f'  {(end-start):5.3f} s') 
-
-
-test = np.dot(srcWin, intWin)
 
 #%% Display (vector field)
 
