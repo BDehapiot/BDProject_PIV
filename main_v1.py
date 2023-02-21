@@ -7,21 +7,39 @@ from skimage import io
 from pathlib import Path
 import matplotlib.pyplot as plt
 from scipy.signal import correlate
+from skimage.transform import rescale
 
 #%% Open data
 
-stack_name = '18-07-11_40x_GBE_UtrCH_Ctrl_b1_uint8.tif'
-# stack_name = '18-07-11_40x_GBE_UtrCH_Ctrl_b1_uint8_static.tif'
-# stack_name = '18-07-11_40x_GBE_UtrCH_Ctrl_b1_uint8_mobile.tif'
-# stack_name = 'test(dy2-dx4).tif'
-stack = io.imread(Path('data', stack_name))
+# -----------------------------------------------------------------------------
 
-#%% Options
+stack_name = '18-07-11_40x_GBE_UtrCH_Ctrl_b1_uint8.tif'
+# stack_name = 'Xenopus-Cilia_250fps_Mesdjian_uint8_lite.tif'
+
+# -----------------------------------------------------------------------------
+
+mask_name = '18-07-11_40x_GBE_UtrCH_Ctrl_b1_uint8_maskProj.tif'
+
+# -----------------------------------------------------------------------------
+
+stack = io.imread(Path('data', stack_name))
+if 'mask_name' in locals():
+    mask = io.imread(Path('data', mask_name))
+else:
+    mask = None
+
+#%% Parameters
 
 intSize = 32
 srcSize = 64
+binning = 1
 
 #%% Initialize
+
+# Rescale data
+stack = rescale(stack, (1, 1/binning, 1/binning), preserve_range=True)
+intSize = intSize//binning
+srcSize = srcSize//binning
 
 # Get stack shape variables
 nT = stack.shape[0]
@@ -95,13 +113,17 @@ for t in range(1, nT):
 end = time.time()
 print(f'  {(end-start):5.3f} s') 
 
-#%% Display (vector field)
+#%% Filter vector field
+
+
+
+#%% Display (matplotlib)
 
 fig, ax = plt.subplots(figsize=(6, 6))
 ax.quiver(u[1,...], v[1,...])
 
 
-#%% Display (images)
+#%% Display (napari)
 
 # viewer = napari.Viewer()
 # viewer.add_image(corr2D)
