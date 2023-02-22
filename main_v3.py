@@ -1,14 +1,10 @@
 #%% Imports
 
-import cv2
 import time
-import napari
 import numpy as np
 from skimage import io 
 from pathlib import Path
-import matplotlib.pyplot as plt
-from scipy.signal import correlate
-from skimage.transform import rescale
+from joblib import Parallel, delayed 
 
 #%% Comments
 
@@ -21,12 +17,12 @@ from skimage.transform import rescale
 # -----------------------------------------------------------------------------
 
 # stack_name = '18-07-11_40x_GBE_UtrCH_Ctrl_b1_uint8.tif'
-stack_name = '18-07-11_40x_GBE_UtrCH_Ctrl_b1_uint8_lite.tif'
-# stack_name = 'Xenopus-Cilia_250fps_Mesdjian_uint8_lite.tif'
+# stack_name = '18-07-11_40x_GBE_UtrCH_Ctrl_b1_uint8_lite.tif'
+stack_name = 'Xenopus-Cilia_250fps_Mesdjian_uint8_lite.tif'
 
 # -----------------------------------------------------------------------------
 
-mask_name = '18-07-11_40x_GBE_UtrCH_Ctrl_b1_uint8_maskProj.tif'
+# mask_name = '18-07-11_40x_GBE_UtrCH_Ctrl_b1_uint8_maskProj.tif'
 # mask_name = '18-07-11_40x_GBE_UtrCH_Ctrl_b1_uint8_maskAll.tif'
 
 # -----------------------------------------------------------------------------
@@ -42,14 +38,25 @@ else:
 intSize = 32 # size of interrogation window (pixels)
 srcSize = 64 # size of search window (pixels)
 binning = 2 # reduce image size to speed up computation (1, 2, 4, 8...)
-maskCutOff = 1 # mask out interrogation windows (???) 
+maskCutOff = 0 # mask out interrogation windows (???) 
+parallel = True
 
 #%% Initialize
 
+from skimage.transform import rescale
+
+# -----------------------------------------------------------------------------
+
 # Adjust parameters acc. to binning
 intSize = intSize//binning
-srcSize = srcSize//binning
+srcSize = srcSize//binning 
+if intSize % 2 != 0:
+    intSize -= intSize % 2
+if srcSize % 2 != 0:
+    srcSize -= srcSize % 2
 srcPad = (srcSize-intSize)//2
+print(f'intSize = {intSize*binning}')
+print(f'srcSize = {srcSize*binning}')
 
 # Rescale data acc. to binning
 stack = rescale(stack, (1, 1/binning, 1/binning), preserve_range=True)
@@ -64,7 +71,7 @@ if mask is not None:
 intYn = (stack.shape[1]-srcPad*2)//intSize
 intXn = (stack.shape[2]-srcPad*2)//intSize
 
-# Setup int. & src window coordinates
+# Setup int. & src. window coordinates
 intYi = np.arange(
     (stack.shape[1]-intYn*intSize)//2, 
     (stack.shape[1]-intYn*intSize)//2 + intYn*intSize, 
@@ -78,32 +85,109 @@ intXi = np.arange(
 srcYi = intYi - srcPad
 srcXi = intXi - srcPad 
 
+#%% Compute vector field
+
+from scipy.signal import correlate
+
+# -----------------------------------------------------------------------------
+
+# Create empty arrays
+v = np.full((stack.shape[0], intYn, intXn), np.nan)
+u = np.full((stack.shape[0], intYn, intXn), np.nan)
+
+start = time.time()
+print('2D correlation')
+
+for t in range(1, stack.shape[0]):       
+    for y, (iYi, sYi) in enumerate(zip(intYi, srcYi)):
+        for x, (iXi, sXi) in enumerate(zip(intXi, srcXi)):
+            
+            # Extract mask int. window 
+            if mask is not None:
+                if mask.ndim == 2:
+                    maskWin = mask[iYi:iYi+intSize,iXi:iXi+intSize]
+                if mask.ndim == 3:
+                    maskWin = mask[t-1,iYi:iYi+intSize,iXi:iXi+intSize]
+            
+            if mask is None or np.mean(maskWin) >= maskCutOff:
+            
+                # Extract int. & src. window
+                intWin = stack[t-1,iYi:iYi+intSize,iXi:iXi+intSize]
+                srcWin = stack[t,sYi:sYi+srcSize,sXi:sXi+srcSize]              
+    
+                # Compute 2D correlation
+                corr2D = correlate(
+                    srcWin - np.mean(srcWin), 
+                    intWin - np.mean(intWin),
+                    method='fft'
+                    )
+                
+                # Find max corr. and infer uv components
+                y_max, x_max = np.unravel_index(corr2D.argmax(), corr2D.shape)            
+                u[t,y,x] = x_max-(intSize-1)-(srcSize//2-intSize//2)
+                v[t,y,x] = y_max-(intSize-1)-(srcSize//2-intSize//2)
+                
+            else:
+                
+                u[t,y,x] = np.nan
+                v[t,y,x] = np.nan
+            
+end = time.time()
+print(f'  {(end-start):5.3f} s') 
+
+#%% Display (vector field)
+
+# import matplotlib.pyplot as plt
+
+# # -----------------------------------------------------------------------------
+
+# fig, ax = plt.subplots(figsize=(6, 6))
+# ax.quiver(u[1,...], v[1,...])
+
+
+#%% Display (images)
+
+# import napari
+
+# -----------------------------------------------------------------------------
+
+# viewer = napari.Viewer()
+# viewer.add_image(roiDisplay)
+
 #%%
 
-stack_test = np.zeros_like(stack[0,...])
-      
-for y in range(intYn):
-    for x in range(intXn):
-        
-        stack_test[
-            srcYi[y]:srcYi[y]+srcSize, 
-            srcXi[x]:srcXi[x]+srcSize,
-            ] = 1  
-                
-for y in range(intYn):
-    for x in range(intXn):
-                
-        stack_test[
-            intYi[y]:intYi[y]+intSize, 
-            intXi[x]:intXi[x]+intSize,
-            ] = 2
-        
-        stack_test[intYi[y],:] = 0
-        stack_test[:,intXi[x]] = 0
-        
-#%% Display (napari)
+# from skimage.draw import rectangle
 
-viewer = napari.Viewer()
-viewer.add_image(stack_test)
+# # -----------------------------------------------------------------------------
+
+# roiDisplay = stack[stack.shape[0]//2,...].copy()
+# roiDisplay = np.repeat(roiDisplay[None,:], intYn*intXn, axis=0)
+      
+# nWin = 0
+# maxDisplay = np.max(roiDisplay)
+# for iYi, sYi in zip(intYi, srcYi):
+#     for iXi, sXi in zip(intXi, srcXi):
+        
+#         # Print srcWin
+#         start = (sYi, sXi)
+#         extent = (srcSize, srcSize)
+#         rr, cc = rectangle(
+#             start, 
+#             extent=extent, 
+#             shape=roiDisplay[0,...].shape
+#             )
+#         roiDisplay[nWin, rr, cc] = maxDisplay/2   
+        
+#         # Print intWin
+#         start = (iYi, iXi)
+#         extent = (intSize, intSize)
+#         rr, cc = rectangle(
+#             start, 
+#             extent=extent, 
+#             shape=roiDisplay[0,...].shape
+#             )
+#         roiDisplay[nWin, rr, cc] = maxDisplay
+        
+#         nWin += 1
             
             
