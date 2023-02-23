@@ -17,8 +17,8 @@ from joblib import Parallel, delayed
 # -----------------------------------------------------------------------------
 
 # stack_name = '18-07-11_40x_GBE_UtrCH_Ctrl_b1_uint8.tif'
-# stack_name = '18-07-11_40x_GBE_UtrCH_Ctrl_b1_uint8_lite.tif'
-stack_name = 'Xenopus-Cilia_250fps_Mesdjian_uint8_lite.tif'
+stack_name = '18-07-11_40x_GBE_UtrCH_Ctrl_b1_uint8_lite.tif'
+# stack_name = 'Xenopus-Cilia_250fps_Mesdjian_uint8_lite.tif'
 
 # -----------------------------------------------------------------------------
 

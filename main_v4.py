@@ -185,12 +185,12 @@ print(f'  {(end-start):5.3f} s')
 
 #%% Display (vector field)
 
-# import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 
 # # -----------------------------------------------------------------------------
 
-# fig, ax = plt.subplots(figsize=(6, 6))
-# ax.quiver(u[1,...], v[1,...])
+fig, ax = plt.subplots(figsize=(6, 6))
+ax.quiver(u[0,...], v[0,...])
 
 
 #%% Display (images)
