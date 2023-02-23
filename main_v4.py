@@ -17,12 +17,13 @@ from joblib import Parallel, delayed
 # -----------------------------------------------------------------------------
 
 # stack_name = '18-07-11_40x_GBE_UtrCH_Ctrl_b1_uint8.tif'
-stack_name = '18-07-11_40x_GBE_UtrCH_Ctrl_b1_uint8_lite.tif'
+# stack_name = '18-07-11_40x_GBE_UtrCH_Ctrl_b1_uint8_lite.tif'
 # stack_name = 'Xenopus-Cilia_250fps_Mesdjian_uint8_lite.tif'
+stack_name = '18-07-03_100x_UtrCH_Ctrl_a2_uint8.tif'
 
 # -----------------------------------------------------------------------------
 
-mask_name = '18-07-11_40x_GBE_UtrCH_Ctrl_b1_uint8_maskProj.tif'
+# mask_name = '18-07-11_40x_GBE_UtrCH_Ctrl_b1_uint8_maskProj.tif'
 # mask_name = '18-07-11_40x_GBE_UtrCH_Ctrl_b1_uint8_maskAll.tif'
 
 # -----------------------------------------------------------------------------
@@ -35,13 +36,13 @@ else:
 
 #%% Parameters
 
-intSize = 32 # size of interrogation window (pixels)
-srcSize = 64 # size of search window (pixels)
+intSize = 24 # size of interrogation window (pixels)
+srcSize = 48 # size of search window (pixels)
 binning = 2 # reduce image size to speed up computation (1, 2, 4, 8...)
-maskCutOff = 0 # mask out interrogation windows (???) 
+maskCutOff = 1 # mask out interrogation windows (???) 
 parallel = True
 
-#%% Function
+#%% Functions
 
 from scipy.signal import correlate
 from skimage.transform import rescale
@@ -50,10 +51,10 @@ from skimage.transform import rescale
 
 def getPIV(
         stack,
-        intSize=intSize,
-        srcSize=srcSize,
-        binning=binning,
-        mask=mask,
+        intSize=32,
+        srcSize=64,
+        binning=1,
+        mask=None,
         maskCutOff=1,
         parallel=True
         ):
@@ -63,8 +64,8 @@ def getPIV(
     def _getPIV(img, ref):
         
         # Create empty arrays
-        v = np.full((intYn, intXn), np.nan)
-        u = np.full((intYn, intXn), np.nan)
+        vecU = np.full((intYn, intXn), np.nan)
+        vecV = np.full((intYn, intXn), np.nan)
         
         for y, (iYi, sYi) in enumerate(zip(intYi, srcYi)):
             for x, (iXi, sXi) in enumerate(zip(intXi, srcXi)):
@@ -80,7 +81,7 @@ def getPIV(
                 
                     # Extract int. & src. window
                     intWin = ref[iYi:iYi+intSize,iXi:iXi+intSize]
-                    srcWin = img[sYi:sYi+srcSize,sXi:sXi+srcSize]              
+                    srcWin = img[sYi:sYi+srcSize,sXi:sXi+srcSize]           
         
                     # Compute 2D correlation
                     corr2D = correlate(
@@ -91,15 +92,15 @@ def getPIV(
                     
                     # Find max corr. and infer uv components
                     y_max, x_max = np.unravel_index(corr2D.argmax(), corr2D.shape)            
-                    u[y,x] = x_max-(intSize-1)-(srcSize//2-intSize//2)
-                    v[y,x] = y_max-(intSize-1)-(srcSize//2-intSize//2)
+                    vecU[y,x] = x_max-(intSize-1)-(srcSize//2-intSize//2)
+                    vecV[y,x] = y_max-(intSize-1)-(srcSize//2-intSize//2)
                     
                 else:
                     
-                    u[y,x] = np.nan
-                    v[y,x] = np.nan
+                    vecU[y,x] = np.nan
+                    vecV[y,x] = np.nan
         
-        return u, v
+        return vecU, vecV
         
     # Run ---------------------------------------------------------------------
 
@@ -140,8 +141,8 @@ def getPIV(
         )
     srcYi = intYi - srcPad
     srcXi = intXi - srcPad 
-    
-    # 
+
+    # _getPIV
     if parallel:
         
         output_list = Parallel(n_jobs=-1)(
@@ -161,37 +162,107 @@ def getPIV(
         for t in range(1, stack.shape[0])
         ]
         
-    # Extract outputs
-    u = [data[0] for data in output_list]
-    v = [data[1] for data in output_list]
+    # Fill output dictionary    
+    output_dict = {
+    
+    # Parameters
+    'intSize': intSize,
+    'srcSize': srcSize,
+    'binning': binning,
+    'maskCutOff': maskCutOff,
+    
+    # Data
+    'intYi': intYi,
+    'intXi': intXi,
+    'vecU': np.stack(
+        [data[0] for data in output_list], axis=0),
+    'vecV': np.stack(
+        [data[1] for data in output_list], axis=0),
+
+    }
         
-    return u, v
+    return output_dict
 
 start = time.time()
 print('2D correlation')
         
-u, v = getPIV(
-        stack,
-        intSize=intSize,
-        srcSize=srcSize,
-        binning=binning,
-        mask=mask,
-        maskCutOff=1,
-        parallel=True
-        )
+output_dict = getPIV(
+    stack,
+    intSize=intSize,
+    srcSize=srcSize,
+    binning=binning,
+    mask=mask,
+    maskCutOff=maskCutOff,
+    parallel=True
+    )
 
 end = time.time()
 print(f'  {(end-start):5.3f} s') 
 
+#%% Filter results 
+
+from scipy.stats import zscore
+from bdtools.nan import nanreplace, nanfilt
+
+# -----------------------------------------------------------------------------
+   
+# Extract parameters & data
+vecU = output_dict['vecU']
+vecV = output_dict['vecV']
+
+# 
+
+# outTresh = 1.5
+    
+# for t, (u, v) in enumerate(zip(vecU, vecV)):
+    
+#     temp_mask = ~np.isnan(u)
+#     norm = np.hypot(u, v)
+#     z_u = np.abs(zscore(u, axis=None, nan_policy='omit'))
+#     z_v = np.abs(zscore(v, axis=None, nan_policy='omit'))
+#     u[(z_u>outTresh) | (z_v>outTresh)] = np.nan
+#     v[(z_u>outTresh) | (z_v>outTresh)] = np.nan
+    
+#     u = nanreplace(
+#         u, 
+#         kernel_size=3, 
+#         method='mean', 
+#         mask=temp_mask,
+#         )
+
+#     v = nanreplace(
+#         v, 
+#         kernel_size=3, 
+#         method='mean', 
+#         mask=temp_mask,
+#         )
+    
+#     vecU[t,...] = nanfilt(
+#         u, 
+#         kernel_size=3, 
+#         method='mean', 
+#         iterations=3,
+#         )
+
+#     vecV[t,...] = nanfilt(
+#         v, 
+#         kernel_size=3, 
+#         method='mean', 
+#         iterations=3,
+#         )   
+
 #%% Display (vector field)
 
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 
-# # -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 
-fig, ax = plt.subplots(figsize=(6, 6))
-ax.quiver(u[0,...], v[0,...])
-
+# t = 40
+# u = vecU[t,...]
+# v = vecV[t,...]
+# norm = np.hypot(u, v)
+# fig, ax = plt.subplots(figsize=(6, 6))
+# ax.quiver(u, v, norm)
 
 #%% Display (images)
 
