@@ -174,10 +174,8 @@ def getPIV(
     # Data
     'intYi': intYi,
     'intXi': intXi,
-    'vecU': np.stack(
-        [data[0] for data in output_list], axis=0),
-    'vecV': np.stack(
-        [data[1] for data in output_list], axis=0),
+    'vecU': np.stack([data[0] for data in output_list], axis=0),
+    'vecV': np.stack([data[1] for data in output_list], axis=0),
 
     }
         
@@ -209,6 +207,8 @@ from bdtools.nan import nanreplace, nanfilt
 # Extract parameters & data
 vecU = output_dict['vecU']
 vecV = output_dict['vecV']
+
+
 
 # -----------------------------------------------------------------------------
 
