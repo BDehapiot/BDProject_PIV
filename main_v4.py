@@ -210,7 +210,9 @@ from bdtools.nan import nanreplace, nanfilt
 vecU = output_dict['vecU']
 vecV = output_dict['vecV']
 
-# 
+# -----------------------------------------------------------------------------
+
+#%% 
 
 # outTresh = 1.5
     
